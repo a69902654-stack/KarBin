@@ -111,3 +111,5 @@ curl "http://localhost/kar/api/activities.php?limit=10"
 ## 📄 لایسنس
 
 در حال حاضر لایسنسی تعیین نشده است.
+
+LinkedIn : https://www.linkedin.com/feed/update/urn:li:activity:7514658725392166912/
