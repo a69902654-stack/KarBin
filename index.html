@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orange Color Detection - Camera & Video</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tracking-cube {
+            position: absolute;
+            border: 3px solid rgba(255, 165, 0, 0.9); /* Orange color */
+            background-color: rgba(255, 165, 0, 0.15);
+            z-index: 10;
+            transition: all 0.2s ease-out; /* Smoother transition */
+            border-radius: 8px;
+            box-shadow: 0 0 25px rgba(255, 165, 0, 0.6);
+            animation: pulse-orange 1.5s infinite;
+        }
+        
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 15px rgba(255, 165, 0, 0.5); }
+            50% { box-shadow: 0 0 35px rgba(255, 165, 0, 0.8); }
+            100% { box-shadow: 0 0 15px rgba(255, 165, 0, 0.5); }
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            overflow: hidden;
+            background-color: #111;
+            border-radius: 0.5rem;
+        }
+        
+        .video-element {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .canvas-element {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        
+        .controls {
+            transition: all 0.3s ease;
+        }
+        
+        .controls:hover {
+            transform: translateY(-5px);
+        }
+        
+        .sensitivity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f97316; /* Orange-500 */
+            cursor: pointer;
+        }
+
+        .source-toggle {
+            display: flex;
+            background-color: #374151;
+            border-radius: 0.5rem;
+            padding: 4px;
+        }
+        .source-option {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #d1d5db;
+        }
+        .source-option.active {
+            background-color: #f97316; /* Orange-500 */
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent">
+                <i class="fas fa-palette fa-fw mr-2"></i>Orange Color Detection
+            </h1>
+            <p class="text-gray-400">Track the color orange in real-time using your camera or a video file</p>
+        </header>
+
+        <main class="max-w-4xl mx-auto">
+            <!-- Input Source Selection -->
+            <div class="bg-gray-800 rounded-lg p-4 mb-6">
+                <h3 class="text-lg font-semibold mb-3 text-gray-300">Select Input Source</h3>
+                <div class="source-toggle">
+                    <div id="cameraOption" class="source-option active">
+                        <i class="fas fa-video mr-2"></i>Live Camera
+                    </div>
+                    <div id="videoOption" class="source-option">
+                        <i class="fas fa-file-video mr-2"></i>Video File
+                    </div>
+                </div>
+                <div id="videoFileInput" class="mt-4 hidden">
+                    <label for="videoUpload" class="block text-sm font-medium text-gray-400 mb-2">Choose a video file</label>
+                    <input type="file" id="videoUpload" accept="video/*" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-600 file:text-white hover:file:bg-orange-700 cursor-pointer">
+                </div>
+            </div>
+
+            <div class="video-container mb-6 shadow-xl">
+                <video id="video" class="video-element" muted playsinline></video>
+                <canvas id="canvas" class="canvas-element"></canvas>
+                <div id="trackingContainer">
+                    <div id="trackingCube" class="tracking-cube" style="display: none;"></div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-semibold mb-4 text-orange-400">Color Range Settings</h2>
+                <p class="text-xs text-gray-400 mb-4">Adjust these sliders to match the specific orange color you want to track.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="flex flex-col">
+                        <label for="minR" class="text-sm font-medium mb-2 flex items-center">
+                            <i class="fas fa-tint mr-2 text-red-500"></i> Red Range
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="minR" min="0" max="255" value="150" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                            <input type="range" id="maxR" min="0" max="255" value="255" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span id="minRVal">150</span>
+                            <span id="maxRVal">255</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col">
+                        <label for="minG" class="text-sm font-medium mb-2 flex items-center">
+                            <i class="fas fa-tint mr-2 text-green-500"></i> Green Range
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="minG" min="0" max="255" value="50" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                            <input type="range" id="maxG" min="0" max="255" value="180" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span id="minGVal">50</span>
+                            <span id="maxGVal">180</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col">
+                        <label for="minB" class="text-sm font-medium mb-2 flex items-center">
+                            <i class="fas fa-tint mr-2 text-blue-500"></i> Blue Range
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="minB" min="0" max="255" value="0" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                            <input type="range" id="maxB" min="0" max="255" value="100" class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span id="minBVal">0</span>
+                            <span id="maxBVal">100</span>
+                        </div>
+                    </div>
+                     <div class="flex flex-col">
+                        <label for="minPixelCount" class="text-sm font-medium mb-2 flex items-center">
+                            <i class="fas fa-filter mr-2 text-yellow-500"></i> Detection Threshold
+                        </label>
+                        <input type="range" id="minPixelCount" min="10" max="500" value="100" 
+                               class="sensitivity-slider w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>Less Sensitive</span>
+                            <span>More Sensitive</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <button id="startBtn" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center controls">
+                    <i class="fas fa-play mr-2"></i> Start Tracking
+                </button>
+                <button id="stopBtn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center controls" disabled>
+                    <i class="fas fa-stop mr-2"></i> Stop Tracking
+                </button>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-bar mr-2 text-orange-400"></i> Tracking Statistics
+                </h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-gray-700 p-4 rounded-lg text-center">
+                        <div class="text-3xl font-bold text-orange-400" id="colorPixelCount">0</div>
+                        <div class="text-sm text-gray-400">Orange Pixels</div>
+                    </div>
+                    <div class="bg-gray-700 p-4 rounded-lg text-center">
+                        <div class="text-3xl font-bold text-green-400" id="colorCoverage">0%</div>
+                        <div class="text-sm text-gray-400">Screen Coverage</div>
+                    </div>
+                    <div class="bg-gray-700 p-4 rounded-lg text-center">
+                        <div class="text-3xl font-bold text-purple-400" id="frameRate">0</div>
+                        <div class="text-sm text-gray-400">FPS</div>
+                    </div>
+                    <div class="bg-gray-700 p-4 rounded-lg text-center">
+                        <div class="text-3xl font-bold text-yellow-400" id="detectionTime">0ms</div>
+                        <div class="text-sm text-gray-400">Processing Time</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>Orange Color Detection App &copy; 2023 | Adjust sliders for best results</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const trackingCube = document.getElementById('trackingCube');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            // Source selection elements
+            const cameraOption = document.getElementById('cameraOption');
+            const videoOption = document.getElementById('videoOption');
+            const videoFileInputDiv = document.getElementById('videoFileInput');
+            const videoUpload = document.getElementById('videoUpload');
+
+            // Sliders
+            const minRSlider = document.getElementById('minR');
+            const maxRSlider = document.getElementById('maxR');
+            const minGSlider = document.getElementById('minG');
+            const maxGSlider = document.getElementById('maxG');
+            const minBSlider = document.getElementById('minB');
+            const maxBSlider = document.getElementById('maxB');
+            const minPixelCountSlider = document.getElementById('minPixelCount');
+
+            // Value displays
+            const minRVal = document.getElementById('minRVal');
+            const maxRVal = document.getElementById('maxRVal');
+            const minGVal = document.getElementById('minGVal');
+            const maxGVal = document.getElementById('maxGVal');
+            const minBVal = document.getElementById('minBVal');
+            const maxBVal = document.getElementById('maxBVal');
+
+            // Statistics elements
+            const colorPixelCountEl = document.getElementById('colorPixelCount');
+            const colorCoverageEl = document.getElementById('colorCoverage');
+            const frameRateEl = document.getElementById('frameRate');
+            const detectionTimeEl = document.getElementById('detectionTime');
+
+            // Variables
+            let stream = null;
+            let isDetecting = false;
+            let animationId = null;
+            let frameCount = 0;
+            let lastFpsUpdate = 0;
+            let fps = 0;
+            let inputMode = 'camera'; // 'camera' or 'video'
+            
+            // Settings
+            let colorSettings = {
+                minR: parseInt(minRSlider.value),
+                maxR: parseInt(maxRSlider.value),
+                minG: parseInt(minGSlider.value),
+                maxG: parseInt(maxGSlider.value),
+                minB: parseInt(minBSlider.value),
+                maxB: parseInt(maxBSlider.value),
+                minPixelCount: parseInt(minPixelCountSlider.value),
+                cubeSize: 150,
+                scanResolution: 5
+            };
+
+            // Source toggle logic
+            cameraOption.addEventListener('click', () => {
+                inputMode = 'camera';
+                cameraOption.classList.add('active');
+                videoOption.classList.remove('active');
+                videoFileInputDiv.classList.add('hidden');
+                resetVideo();
+            });
+
+            videoOption.addEventListener('click', () => {
+                inputMode = 'video';
+                videoOption.classList.add('active');
+                cameraOption.classList.remove('active');
+                videoFileInputDiv.classList.remove('hidden');
+                resetVideo();
+            });
+            
+            function resetVideo() {
+                stopTracking();
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+                video.srcObject = null;
+                video.src = '';
+                video.load(); // Reset video element
+            }
+
+            // Event listener for file upload
+            videoUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const fileURL = URL.createObjectURL(file);
+                    video.src = fileURL;
+                    video.load(); // Load the new video source
+                }
+            });
+
+            // Event listeners for sliders
+            const setupSliderListener = (slider, valueDisplay, settingKey) => {
+                slider.addEventListener('input', () => {
+                    const value = parseInt(slider.value);
+                    colorSettings[settingKey] = value;
+                    if (valueDisplay) valueDisplay.textContent = value;
+                });
+            };
+
+            setupSliderListener(minRSlider, minRVal, 'minR');
+            setupSliderListener(maxRSlider, maxRVal, 'maxR');
+            setupSliderListener(minGSlider, minGVal, 'minG');
+            setupSliderListener(maxGSlider, maxGVal, 'maxG');
+            setupSliderListener(minBSlider, minBVal, 'minB');
+            setupSliderListener(maxBSlider, maxBVal, 'maxB');
+            setupSliderListener(minPixelCountSlider, null, 'minPixelCount');
+
+            // Start button click handler
+            startBtn.addEventListener('click', async () => {
+                if (inputMode === 'camera') {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'environment' },
+                            audio: false 
+                        });
+                        video.srcObject = stream;
+                        await video.play();
+                    } catch (err) {
+                        console.error('Error accessing camera:', err);
+                        alert('Could not access the camera. Please make sure you have granted camera permissions.');
+                        return;
+                    }
+                } else if (inputMode === 'video') {
+                    if (!video.src) {
+                        alert('Please select a video file first.');
+                        return;
+                    }
+                    await video.play();
+                }
+                
+                // Set canvas dimensions after video metadata is loaded
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+
+                isDetecting = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                startBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700');
+                startBtn.classList.add('bg-orange-900', 'cursor-not-allowed');
+                stopBtn.classList.remove('bg-gray-700', 'cursor-not-allowed');
+                stopBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+                
+                startDetection();
+            });
+            
+            // Stop button click handler
+            function stopTracking() {
+                isDetecting = false;
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                video.pause();
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                startBtn.classList.add('bg-orange-600', 'hover:bg-orange-700');
+                startBtn.classList.remove('bg-orange-900', 'cursor-not-allowed');
+                stopBtn.classList.add('bg-gray-700', 'cursor-not-allowed');
+                stopBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                
+                trackingCube.style.display = 'none';
+                colorPixelCountEl.textContent = '0';
+                colorCoverageEl.textContent = '0%';
+            }
+            stopBtn.addEventListener('click', stopTracking);
+
+            // Stop tracking when video ends
+            video.addEventListener('ended', () => {
+                stopTracking();
+            });
+            
+            // Main detection function
+            function startDetection() {
+                if (!isDetecting || video.paused || video.ended) return;
+                
+                const startTime = performance.now();
+                
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                const colorData = detectColor(currentFrame);
+                updateTrackingUI(colorData);
+                
+                // Calculate FPS
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsUpdate >= 1000) {
+                    fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                    frameCount = 0;
+                    lastFpsUpdate = now;
+                    frameRateEl.textContent = fps;
+                }
+                
+                const processingTime = performance.now() - startTime;
+                detectionTimeEl.textContent = `${Math.round(processingTime)}ms`;
+                
+                animationId = requestAnimationFrame(startDetection);
+            }
+            
+            // Color detection algorithm (no changes needed here)
+            function detectColor(frame) {
+                const data = frame.data;
+                const width = frame.width;
+                const height = frame.height;
+                
+                let sumX = 0;
+                let sumY = 0;
+                let colorPixelCount = 0;
+                
+                for (let y = 0; y < height; y += colorSettings.scanResolution) {
+                    for (let x = 0; x < width; x += colorSettings.scanResolution) {
+                        const pos = (y * width + x) * 4;
+                        const r = data[pos];
+                        const g = data[pos + 1];
+                        const b = data[pos + 2];
+                        
+                        if (r >= colorSettings.minR && r <= colorSettings.maxR &&
+                            g >= colorSettings.minG && g <= colorSettings.maxG &&
+                            b >= colorSettings.minB && b <= colorSettings.maxB) {
+                            
+                            sumX += x;
+                            sumY += y;
+                            colorPixelCount++;
+                        }
+                    }
+                }
+                
+                let centerX = 0;
+                let centerY = 0;
+                let found = false;
+
+                if (colorPixelCount > colorSettings.minPixelCount) {
+                    centerX = Math.round(sumX / colorPixelCount);
+                    centerY = Math.round(sumY / colorPixelCount);
+                    found = true;
+                }
+                
+                return {
+                    found,
+                    centerX,
+                    centerY,
+                    colorPixelCount,
+                    width,
+                    height
+                };
+            }
+            
+            // Update UI with color data (no changes needed here)
+            function updateTrackingUI(colorData) {
+                const { found, centerX, centerY, colorPixelCount, width, height } = colorData;
+                
+                colorPixelCountEl.textContent = colorPixelCount;
+                const totalPixelsScanned = Math.ceil(width / colorSettings.scanResolution) * Math.ceil(height / colorSettings.scanResolution);
+                const coverage = totalPixelsScanned > 0 ? Math.round((colorPixelCount / totalPixelsScanned) * 100) : 0;
+                colorCoverageEl.textContent = `${coverage}%`;
+
+                if (found) {
+                    trackingCube.style.display = 'block';
+                    
+                    const cubeSizePercent = (colorSettings.cubeSize / width) * 100;
+                    const leftPercent = ((centerX - colorSettings.cubeSize/2) / width) * 100;
+                    const topPercent = ((centerY - colorSettings.cubeSize/2) / height) * 100;
+                    
+                    trackingCube.style.width = `${cubeSizePercent}%`;
+                    trackingCube.style.height = `${cubeSizePercent * (height/width)}%`;
+                    trackingCube.style.left = `${leftPercent}%`;
+                    trackingCube.style.top = `${topPercent}%`;
+                } else {
+                    trackingCube.style.display = 'none';
+                }
+            }
+            
+            // Clean up when page is closed
+            window.addEventListener('beforeunload', () => {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
